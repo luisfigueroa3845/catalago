@@ -164,9 +164,10 @@
         <div class="flex flex-col items-center">
           <img id="edit-img-preview" src="" alt="Preview" class="w-24 h-24 object-cover rounded-xl border border-gray-700 mb-2">
           <label class="bg-gray-800 hover:bg-gray-700 text-[11px] text-yellow-400 px-3 py-1 rounded-lg border border-gray-600 cursor-pointer flex items-center gap-1">
-            <i data-lucide="upload" class="w-3.5 h-3.5"></i> Cambiar Imagen
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i> Cambiar Imagen (URL/File)
             <input type="file" id="edit-img-file" accept="image/*" class="hidden" onchange="handleProductImgUpload(event)">
           </label>
+          <input type="text" id="edit-img-url" placeholder="O pega la URL de la imagen aquí" class="w-full input-field px-2 py-1 rounded-lg text-[10px] mt-2">
         </div>
 
         <div>
@@ -192,7 +193,7 @@
 
         <div class="pt-2 flex gap-2">
           <button type="button" onclick="closeEditModal()" class="flex-1 bg-gray-800 text-gray-300 py-2 rounded-xl text-xs font-semibold hover:bg-gray-700">Cancelar</button>
-          <button type="submit" class="flex-1 bg-yellow-500 text-black py-2 rounded-xl text-xs font-bold hover:bg-yellow-400">Guardar</button>
+          <button type="submit" class="flex-1 bg-yellow-500 text-black py-2 rounded-xl text-xs font-bold hover:bg-yellow-400">Guardar en Supabase</button>
         </div>
       </form>
     </div>
@@ -223,7 +224,8 @@
   <script>
     // Configuración Inicial
     const SUPABASE_URL = "https://nhdfqphyvtqltbnlvwll.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_Sv1meBB1hWL0jDD2KdxtmQ_PHlB-lrN";
+    // INSERTA AQUÍ TU ANON KEY DE SUPABASE (Settings -> API -> anon public)
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZGZxcGh5dnRxbHRibmx2d2xsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTcyNjYsImV4cCI6MjEwMzY5MzI2Nn0.cK9AUbvUCj2vFizFQ1IGu0-qkVYq2_mbeu-lscUD3cw";
     const ADVISOR_PIN = "3845";
     const WHATSAPP_PHONE = "584127266335";
     
@@ -231,26 +233,15 @@
     let isAdvisorMode = false;
     let products = [];
 
-    if (SUPABASE_URL.trim() !== "" && SUPABASE_ANON_KEY.trim() !== "") {
+    if (SUPABASE_URL.trim() !== "" && SUPABASE_ANON_KEY !== "COLOCA_AQUI_TU_ANON_KEY_DE_SUPABASE") {
       try {
         supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       } catch (err) {
-        console.warn("⚠️ No se pudo inicializar Supabase, usando localStorage:", err);
+        console.warn("⚠️ No se pudo inicializar Supabase:", err);
       }
     }
 
-    const initialProducts = [
-      { slot_number: 1, name: "9 PM ELIXIR #1", price: 25.00, brand: "Afnan", size: "100 ml", image_url: "https://images.unsplash.com/photo-1594035910387-fea47794261f?auto=format&fit=crop&w=400&q=80" },
-      { slot_number: 2, name: "BESTIA NEGRA #2", price: 25.00, brand: "Armaf", size: "100 ml", image_url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=400&q=80" },
-      { slot_number: 3, name: "ASAD BOURBON #3", price: 25.00, brand: "Lattafa", size: "100 ml", image_url: "https://images.unsplash.com/photo-1547887537-6158d64c35b3?auto=format&fit=crop&w=400&q=80" },
-      { slot_number: 4, name: "YUM YUM #4", price: 25.00, brand: "Armaf", size: "100 ml", image_url: "https://images.unsplash.com/photo-1588405748880-12d1d2a59f75?auto=format&fit=crop&w=400&q=80" },
-      { slot_number: 5, name: "ECLAIRE #5", price: 25.00, brand: "Lattafa", size: "100 ml", image_url: "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?auto=format&fit=crop&w=400&q=80" },
-      { slot_number: 6, name: "YARA CANDY #6", price: 25.00, brand: "Lattafa", size: "100 ml", image_url: "https://images.unsplash.com/photo-1595425970377-c9703cf48b6d?auto=format&fit=crop&w=400&q=80" }
-    ];
-
     async function loadCatalogData() {
-      let fetchedFromCloud = false;
-
       if (supabaseClient) {
         try {
           const { data, error } = await supabaseClient
@@ -258,35 +249,44 @@
             .select('*')
             .order('slot_number', { ascending: true });
 
-          if (!error && data && data.length > 0) {
+          if (!error && data) {
             products = [];
             for (let i = 1; i <= 100; i++) {
               const item = data.find(p => p.slot_number === i);
               products.push(item ? item : createDefaultSlot(i));
             }
-            fetchedFromCloud = true;
+            renderCatalog();
+            setupRealtimeSubscription();
+            return;
           }
         } catch (err) {
           console.warn("Error cargando Supabase:", err);
         }
       }
 
-      if (!fetchedFromCloud) {
-        const localData = localStorage.getItem("esencia_universe_products");
-        if (localData) {
-          products = JSON.parse(localData);
-        } else {
-          products = [];
-          for (let i = 1; i <= 100; i++) {
-            const match = initialProducts.find(p => p.slot_number === i);
-            products.push(match ? match : createDefaultSlot(i));
-          }
-          saveProductsLocal();
-        }
+      // Fallback local si Supabase falla o no está configurado
+      const localData = localStorage.getItem("esencia_universe_products");
+      if (localData) {
+        products = JSON.parse(localData);
+      } else {
+        products = Array.from({ length: 100 }, (_, i) => createDefaultSlot(i + 1));
       }
-
-      loadStoreSettings();
       renderCatalog();
+    }
+
+    // Escuchar cambios en vivo (Realtime)
+    function setupRealtimeSubscription() {
+      if (!supabaseClient) return;
+      supabaseClient
+        .channel('public:products')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+          const updatedIndex = products.findIndex(p => p.slot_number === payload.new.slot_number);
+          if (updatedIndex !== -1) {
+            products[updatedIndex] = payload.new;
+            renderCatalog();
+          }
+        })
+        .subscribe();
     }
 
     function createDefaultSlot(slotNum) {
@@ -300,39 +300,46 @@
       };
     }
 
-    async function loadStoreSettings() {
+    async function saveProductEdit(e) {
+      e.preventDefault();
+      const slotNum = parseInt(document.getElementById("edit-slot-number").value);
+      const name = document.getElementById("edit-name").value;
+      const price = parseFloat(document.getElementById("edit-price").value);
+      const brand = document.getElementById("edit-brand").value;
+      const size = document.getElementById("edit-size").value;
+      const imageUrlInput = document.getElementById("edit-img-url").value;
+      const previewSrc = document.getElementById("edit-img-preview").src;
+
+      const finalImageUrl = imageUrlInput.trim() !== "" ? imageUrlInput : previewSrc;
+
+      const updatedProduct = {
+        slot_number: slotNum,
+        name: name,
+        price: price,
+        brand: brand,
+        size: size,
+        image_url: finalImageUrl
+      };
+
       if (supabaseClient) {
-        try {
-          const { data } = await supabaseClient.from('store_settings').select('*').eq('id', 1).single();
-          if (data && data.advisor_photo) {
-            document.getElementById("advisor-avatar").src = data.advisor_photo;
-          }
-        } catch (e) {}
-      } else {
-        const savedAvatar = localStorage.getItem("esencia_universe_avatar");
-        if (savedAvatar) {
-          document.getElementById("advisor-avatar").src = savedAvatar;
+        const { error } = await supabaseClient
+          .from('products')
+          .upsert(updatedProduct, { onConflict: 'slot_number' });
+
+        if (error) {
+          alert("Error actualizando en Supabase: " + error.message);
+          return;
+        } else {
+          alert("¡Producto actualizado exitosamente en tiempo real para todos!");
         }
+      } else {
+        const index = products.findIndex(p => p.slot_number === slotNum);
+        if (index !== -1) products[index] = updatedProduct;
+        localStorage.setItem("esencia_universe_products", JSON.stringify(products));
       }
-    }
 
-    function saveProductsLocal() {
-      localStorage.setItem("esencia_universe_products", JSON.stringify(products));
-    }
-
-    function sendWhatsAppOrder(slotNum) {
-      const prod = products.find(p => p.slot_number === slotNum);
-      if (!prod) return;
-
-      const text = `Hola Luis! Quisiera agendar el producto:\n` +
-                   `📌 *${prod.name}*\n` +
-                   `👑 Marca: ${prod.brand}\n` +
-                   `🧪 Cantidad: ${prod.size}\n` +
-                   `💰 Precio: €${Number(prod.price).toFixed(2)}\n` +
-                   `📍 Solicito disponibilidad y datos para envío.`;
-
-      const waUrl = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(text)}`;
-      window.open(waUrl, '_blank');
+      closeEditModal();
+      renderCatalog();
     }
 
     function renderCatalog(itemsToRender = products) {
@@ -352,232 +359,14 @@
 
           ${isAdvisorMode ? `
             <button onclick="openEditModal(${prod.slot_number})" class="absolute top-2 right-2 z-10 bg-yellow-500 text-black p-1 rounded-full shadow hover:bg-yellow-400">
-              <i data-lucide="pencil" class="w-3 h-3"></i>
+              <i data-lucide="edit-3" class="w-3 h-3"></i>
             </button>
           ` : ''}
 
-          <div class="w-full h-28 sm:h-36 rounded-lg overflow-hidden bg-gray-900 mb-1.5">
+          <div class="w-full h-28 sm:h-36 rounded-lg overflow-hidden mb-1.5 bg-black">
             <img src="${prod.image_url}" alt="${prod.name}" class="w-full h-full object-cover">
           </div>
 
-          <h4 class="text-[10px] font-extrabold text-white uppercase tracking-tight mb-1 line-clamp-1 px-0.5">${prod.name}</h4>
-
-          <div class="space-y-1 mb-2 text-[10px]">
-            <div class="bg-[#161616] border border-gray-800 rounded px-1.5 py-0.5 flex items-center gap-1">
-              <i data-lucide="tag" class="w-3 h-3 text-yellow-400 flex-shrink-0"></i>
-              <span class="font-bold text-yellow-400 truncate">€${Number(prod.price).toFixed(2)}</span>
-            </div>
-
-            <div class="bg-[#161616] border border-gray-800 rounded px-1.5 py-0.5 flex items-center gap-1">
-              <i data-lucide="crown" class="w-3 h-3 text-yellow-400 flex-shrink-0"></i>
-              <span class="font-medium text-gray-300 truncate">${prod.brand}</span>
-            </div>
-
-            <div class="bg-[#161616] border border-gray-800 rounded px-1.5 py-0.5 flex items-center gap-1">
-              <i data-lucide="flask-conical" class="w-3 h-3 text-yellow-400 flex-shrink-0"></i>
-              <span class="font-medium text-gray-300 truncate">${prod.size}</span>
-            </div>
-          </div>
-
-          <button onclick="sendWhatsAppOrder(${prod.slot_number})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 rounded-lg text-[10px] flex items-center justify-center gap-1.5 shadow transition cursor-pointer">
-            ${whatsappIconSVG}
-            <span>Agendar</span>
-          </button>
-        `;
-        grid.appendChild(card);
-      });
-
-      lucide.createIcons();
-    }
-
-    function filterProducts() {
-      const query = document.getElementById("search-input").value.toLowerCase().trim();
-      const filtered = products.filter(p => 
-        p.name.toLowerCase().includes(query) ||
-        p.brand.toLowerCase().includes(query) ||
-        p.slot_number.toString() === query
-      );
-      renderCatalog(filtered);
-    }
-
-    function openPinModal() {
-      if (isAdvisorMode) {
-        isAdvisorMode = false;
-        updateAdvisorUI();
-        return;
-      }
-      document.getElementById("pin-modal").classList.remove("hidden");
-      document.getElementById("pin-input").value = "";
-      document.getElementById("pin-input").focus();
-    }
-
-    function closePinModal() {
-      document.getElementById("pin-modal").classList.add("hidden");
-    }
-
-    function verifyPin() {
-      const input = document.getElementById("pin-input").value;
-      if (input === ADVISOR_PIN) {
-        isAdvisorMode = true;
-        closePinModal();
-        updateAdvisorUI();
-      } else {
-        alert("PIN incorrecto.");
-      }
-    }
-
-    function updateAdvisorUI() {
-      const dot = document.getElementById("mode-status-dot");
-      const text = document.getElementById("mode-status-text");
-      const btn = document.getElementById("btn-toggle-advisor");
-      const changeAvatarBtn = document.getElementById("btn-change-avatar");
-
-      if (isAdvisorMode) {
-        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
-        text.innerText = "Modo Asesor (Edición Activa)";
-        text.className = "text-[11px] sm:text-xs text-emerald-400 font-semibold";
-        btn.innerHTML = `<i data-lucide="unlock" class="w-3.5 h-3.5"></i><span>Salir Asesor</span>`;
-        changeAvatarBtn.classList.remove("hidden");
-      } else {
-        dot.className = "w-2.5 h-2.5 rounded-full bg-gray-400";
-        text.innerText = "Vista Pública (Solo Lectura)";
-        text.className = "text-[11px] sm:text-xs text-gray-400 font-medium";
-        btn.innerHTML = `<i data-lucide="lock" class="w-3.5 h-3.5"></i><span>Acceso Asesor</span>`;
-        changeAvatarBtn.classList.add("hidden");
-      }
-      lucide.createIcons();
-      renderCatalog();
-    }
-
-    let currentTempImage = "";
-
-    function openEditModal(slotNum) {
-      const prod = products.find(p => p.slot_number === slotNum);
-      if (!prod) return;
-
-      document.getElementById("modal-slot-num").innerText = prod.slot_number;
-      document.getElementById("edit-slot-number").value = prod.slot_number;
-      document.getElementById("edit-name").value = prod.name;
-      document.getElementById("edit-price").value = prod.price;
-      document.getElementById("edit-brand").value = prod.brand;
-      document.getElementById("edit-size").value = prod.size;
-      document.getElementById("edit-img-preview").src = prod.image_url;
-      currentTempImage = prod.image_url;
-
-      document.getElementById("edit-modal").classList.remove("hidden");
-    }
-
-    function closeEditModal() {
-      document.getElementById("edit-modal").classList.add("hidden");
-    }
-
-    async function saveProductEdit(e) {
-      e.preventDefault();
-      const slot = parseInt(document.getElementById("edit-slot-number").value);
-      const index = products.findIndex(p => p.slot_number === slot);
-
-      if (index !== -1) {
-        const updatedProduct = {
-          slot_number: slot,
-          name: document.getElementById("edit-name").value,
-          price: parseFloat(document.getElementById("edit-price").value),
-          brand: document.getElementById("edit-brand").value,
-          size: document.getElementById("edit-size").value,
-          image_url: currentTempImage
-        };
-
-        products[index] = updatedProduct;
-        saveProductsLocal();
-        renderCatalog();
-
-        if (supabaseClient) {
-          try {
-            await supabaseClient.from('products').upsert(updatedProduct, { onConflict: 'slot_number' });
-          } catch (err) {
-            console.error("Error en Supabase:", err);
-          }
-        }
-
-        closeEditModal();
-      }
-    }
-
-    function compressImage(file, maxWidth = 650, quality = 0.75) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-          const img = new Image();
-          img.src = event.target.result;
-          img.onload = () => {
-            const canvas = document.createElement("canvas");
-            let width = img.width;
-            let height = img.height;
-
-            if (width > maxWidth) {
-              height = Math.round((height * maxWidth) / width);
-              width = maxWidth;
-            }
-
-            canvas.width = width;
-            canvas.height = height;
-
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", quality));
-          };
-        };
-      });
-    }
-
-    async function handleProductImgUpload(e) {
-      const file = e.target.files[0];
-      if (file) {
-        const compressed = await compressImage(file, 650, 0.75);
-        currentTempImage = compressed;
-        document.getElementById("edit-img-preview").src = compressed;
-      }
-    }
-
-    async function handleAvatarUpload(e) {
-      const file = e.target.files[0];
-      if (file) {
-        const compressed = await compressImage(file, 350, 0.80);
-        document.getElementById("advisor-avatar").src = compressed;
-        localStorage.setItem("esencia_universe_avatar", compressed);
-
-        if (supabaseClient) {
-          try {
-            await supabaseClient.from('store_settings').upsert({ id: 1, advisor_photo: compressed });
-          } catch (err) {}
-        }
-      }
-    }
-
-    function openShareModal() {
-      document.getElementById("share-modal").classList.remove("hidden");
-    }
-    function closeShareModal() {
-      document.getElementById("share-modal").classList.add("hidden");
-    }
-    function shareTo(platform) {
-      const url = window.location.href;
-      const text = "¡Explora el catálogo oficial de Esencia del Universo!";
-
-      if (platform === "whatsapp") {
-        window.open(`https://wa.me/?text=${encodeURIComponent(text + " " + url)}`, "_blank");
-      } else if (platform === "facebook") {
-        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
-      } else if (platform === "copy") {
-        navigator.clipboard.writeText(url);
-        alert("¡Enlace copiado al portapapeles!");
-      }
-      closeShareModal();
-    }
-
-    window.addEventListener("DOMContentLoaded", () => {
-      loadCatalogData();
-    });
-  </script>
-</body>
-</html>
+          <div class="flex flex-col flex-1 justify-between">
+            <div>
+              <span class="text-[8px] font-
